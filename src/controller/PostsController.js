@@ -1,6 +1,6 @@
 const postModel = require("../models/PostModel");
 const menuModel = require("../models/MenuModel");
-
+const tempModel = require("../models/TempModel");
 function getPostType(slug_postType) {
     return menuModel.findOne({ slug: slug_postType }).lean();
 }
@@ -19,34 +19,60 @@ function getPosts(postTypeID) {
     return postModel.find({ parentID: postTypeID }).lean();
 }
 
+function getPostPublic(req, res, next) {
+    const menusPromise = menuModel.find({});
+    const postsPromise = postModel.find({state:'public'});
+    Promise.all([menusPromise, postsPromise])
+        .then(([menusData, postsData]) => {
+            const customPostsData = postsData.map((item, index) => {
+                const postTypeName = menusData.filter(
+                    (menu) => menu._id == item.parentID
+                )[0].name;
+                const finalData = {
+                    ...item._doc,
+                    postTypeName: postTypeName,
+                    index: index + 1,
+                };
+                return finalData;
+            });
+            res.status(200).json(customPostsData);
+        })
+        .catch((error) => res.status(500).json(error));
+}
+
+function getPostTemp(req, res, next) {
+    const state = req.params.type;
+    const postsPromise = tempModel.find({ type: "post", state: state });
+    const menusPromise = menuModel.find({});
+    console.log("here 1");
+    Promise.all([menusPromise, postsPromise])
+        .then(([menusData, postsData]) => {
+            console.log("here 2");
+
+            const customPostsData = postsData.map((item, index) => {
+                const postTypeName = menusData.filter(
+                    (menu) => menu._id == item.data.parentID
+                )[0].name;
+                item._doc.data.postTypeName = postTypeName;
+                const finalData = {
+                    ...item._doc,
+                    index: index + 1,
+                };
+                return finalData;
+            });
+            console.log("here 3", customPostsData);
+
+            res.status(200).json(customPostsData);
+        })
+        .catch((error) => res.status(500).json(error));
+}
+
 class PostsController {
     index(req, res, next) {
         postModel
             .find({})
             .then((data) => res.status(200).json(data))
             .catch((error) => res.status(500).json("error: ", error));
-    }
-
-    // [GET] /posts/full
-    fullPosts(req, res, next) {
-        const menusPromise = menuModel.find({});
-        const postsPromise = postModel.find({});
-        Promise.all([menusPromise, postsPromise])
-            .then(([menusData, postsData]) => {
-                const customPostsData = postsData.map((item, index) => {
-                    const postTypeName = menusData.filter(
-                        (menu) => menu._id == item.parentID
-                    )[0].name;
-                    const finalData = {
-                        ...item._doc,
-                        postTypeName: postTypeName,
-                        index: index + 1,
-                    };
-                    return finalData;
-                });
-                res.status(200).json(customPostsData);
-            })
-            .catch((error) => res.status(500).json(error));
     }
 
     // [GET] /posts/:parent/:slug
@@ -92,11 +118,13 @@ class PostsController {
     // [POST] /posts/store
     storePost(req, res, next) {
         const postData = req.body;
+        res.json(postData);
+        return;
         const newPost = new postModel(postData);
         newPost
             .save()
-            .then((result) => res.status(200).json("success"))
-            .catch((error) => res.status(500).json("error: ", error));
+            .then((result) => res.status(200).json(postData))
+            .catch((error) => res.status(500).json({ "error: ": error }));
     }
 
     // [GET] /posts/edit/:slug
@@ -112,10 +140,10 @@ class PostsController {
     updatePost(req, res, edit) {
         const postId = req.params.slug;
         const postData = req.body;
-        postData.slug = postData.title.toLowerCase().trim().split(' ').join('-');
+
         postModel
             .updateOne({ _id: postId }, postData)
-            .then((result) => res.status(200).redirect('back'))
+            .then((result) => res.status(200).redirect("back"))
             .catch((error) => res.status(500).json("error: ", error));
     }
 
@@ -128,12 +156,80 @@ class PostsController {
             .catch((error) => res.status(500).json("error: ", error));
     }
 
+    // ADMIN
+
+    // [GET] /admin/posts/:type
+    fullPosts(req, res, next) {
+        let type = req.params.type;
+        console.log(type);
+        switch (type) {
+            case "pending":
+            case "accepting":
+            case "executing":
+                getPostTemp(req, res, next);
+                break;
+            case "public":
+            default:
+                getPostPublic(req, res, next);
+                break;
+        }
+    }
+
     postByID(req, res, next) {
         const postID = req.query.q;
-        postModel
-            .findById(postID)
-            .then((data) => res.status(200).json(data))
-            .catch((error) => res.status(500).json({ error: error }));
+        tempModel.findById(postID).then(data => {
+            if(data) {
+               res.status(200).json({...data.data, _id:postID}) 
+               return;
+            }
+            postModel
+                .findById(postID)
+                .then((data) => res.status(200).json(data))
+                .catch((error) => res.status(500).json({ error: error }));
+            
+        }).catch(error => res.status(500).json(error))
+       
+    }
+
+    admin_addPost(req, res, next) {
+        const item = req.body;
+        const newPost = new postModel(item);
+        newPost.attachments[0].image = item.image;
+        delete newPost.image;
+        const newTemps = new tempModel({
+            data: newPost,
+            type: "post",
+            method: "add",
+            state: "pending",
+        });
+        newTemps.save().then((data) => res.json(newTemps));
+    }
+
+    admin_updatePost(req, res, next) {
+        const postId = req.params.slug;
+        const postData = req.body;
+        const image = postData.image;
+        delete postData.image;
+        tempModel
+            .findByIdAndUpdate(postId, { data: {...postData, attachments: [{title: "", image: image}]} })
+            .then((result) => {
+                if (!result) {
+                    const newPost = new postModel(postData);
+                    newPost.attachments[0].image = postData.image;
+                    delete newPost.image;
+                    const newTemps = new tempModel({
+                        data: newPost,
+                        type: "post",
+                        method: "update",
+                        state: "pending",
+                    });
+                    newTemps.save().then((data) =>{ res.json(newTemps)});
+                    postModel.findByIdAndUpdate(postId, {state: 'pending'}).then(res => console.log(res))
+                    return;
+               
+                }
+                res.status(200).redirect('back')
+            });
     }
 }
 

@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
-
+const slug = require('mongoose-slug-updater')
+mongoose.plugin(slug)
 
 const menuModel = new Schema({
     name: {type: String},

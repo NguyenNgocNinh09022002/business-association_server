@@ -10,6 +10,7 @@ const postModel = new Schema({
     attachments: { type: Array, default: [{image: "", title: ""}] },
     state: {type: String},
     parentID: {type: String},
+    state: {type: String, default: 'public'},
     slug: {type:String, slug:'title', unique: true},
     
 },{timestamps:true} )

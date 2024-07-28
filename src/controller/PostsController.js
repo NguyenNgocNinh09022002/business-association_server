@@ -48,11 +48,15 @@ function getPostTemp(req, res, next) {
     Promise.all([menusPromise, postsPromise])
         .then(([menusData, postsData]) => {
             console.log("here 2");
+            console.log("menuData: ", menusData.length);
+            console.log("posts data", postsData.length);
+            console.log('state: ', state)
 
             const customPostsData = postsData.map((item, index) => {
-                const postTypeName = menusData.filter(
+                const postTypeName =  menusData.filter(
                     (menu) => menu._id == item.data.parentID
                 )[0].name;
+                console.log('index: '+index +" : ",postTypeName)
                 item._doc.data.postTypeName = postTypeName;
                 const finalData = {
                     ...item._doc,
@@ -179,12 +183,12 @@ class PostsController {
         const postID = req.query.q;
         tempModel.findById(postID).then(data => {
             if(data) {
-               res.status(200).json({...data.data, _id:postID}) 
+               res.status(200).json({...data.data, _id:postID, postID: data.data._id}) 
                return;
             }
             postModel
                 .findById(postID)
-                .then((data) => res.status(200).json(data))
+                .then((data) => { const postData = {...data._doc, postID: postID}; res.status(200).json(postData)})
                 .catch((error) => res.status(500).json({ error: error }));
             
         }).catch(error => res.status(500).json(error))
@@ -208,28 +212,85 @@ class PostsController {
     admin_updatePost(req, res, next) {
         const postId = req.params.slug;
         const postData = req.body;
+        
+        console.log(postData)
         const image = postData.image;
         delete postData.image;
+
         tempModel
             .findByIdAndUpdate(postId, { data: {...postData, attachments: [{title: "", image: image}]} })
             .then((result) => {
                 if (!result) {
-                    const newPost = new postModel(postData);
-                    newPost.attachments[0].image = postData.image;
-                    delete newPost.image;
+                    const newPost = new postModel({...postData, attachments:[{title:"", image: image}]});
+
                     const newTemps = new tempModel({
                         data: newPost,
                         type: "post",
                         method: "update",
                         state: "pending",
                     });
-                    newTemps.save().then((data) =>{ res.json(newTemps)});
-                    postModel.findByIdAndUpdate(postId, {state: 'pending'}).then(res => console.log(res))
+                    newTemps.save().then((data) =>{ res.json(req.body)});
+                    postModel.findByIdAndUpdate(postId, {state: 'pending'}).then(result => {})
                     return;
                
                 }
                 res.status(200).redirect('back')
             });
+    }
+    admin_deletePost(req, res, next) {
+        console.log('delete post')
+        const postId = req.params.slug;
+        postModel.findById(postId).then(postData => {
+
+            const customData = new postModel(postData)
+            delete customData.state;
+            const newTemps = new tempModel({
+                data: customData,
+                type: "post",
+                method: "delete",
+                state: "pending",
+            });
+            newTemps.save().then((data) =>{ res.status(200).json(data)});
+            postModel.findByIdAndUpdate(postId, {state: 'pending'}).then(result => {})
+            return;
+        })
+        
+    }
+
+    async admin_agreeUpdate(req, res, next) {
+        const state = req.params.state;
+        const postID = req.params.id;
+        console.log('state: ',state )
+        console.log('postID', postID)
+        switch(state) {
+            case 'pending':
+                tempModel.findByIdAndUpdate(postID, {state:'accepting'}).then(result => res.status(200).json(result));
+                return;
+            case 'accepting':
+                tempModel
+                    .findById(postID)
+                    .then(async (tempData) => {
+                        switch (tempData.method) {
+                            case "add":
+                                const newPost = new postModel(tempData.data);
+                                newPost.save().then((result) => {} );
+                                tempModel.findByIdAndDelete(postID).then((result) => {});
+                                break;
+                            case "update":
+                                postModel.findByIdAndUpdate(tempData.data._id,{...tempData.data, state:'public'}).then(result => {});
+                                tempModel.findByIdAndDelete(postID).then((result) => {});
+                                break;
+                            case 'delete':
+                                postModel.findByIdAndDelete(tempData.data._id).then((result) => {});
+                                tempModel.findByIdAndDelete(postID).then((result) => {});
+                                break;
+                        }
+                    })
+                    .catch((error) => res.status(500).json({ error: error }));
+                break;
+        }
+        res.status(200).json('success')
+
     }
 }
 

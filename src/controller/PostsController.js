@@ -46,14 +46,14 @@ function getPostTemp(req, res, next) {
     const menusPromise = menuModel.find({});
     console.log("here 1");
     Promise.all([menusPromise, postsPromise])
-        .then(([menusData, postsData]) => {
+        .then( ([menusData, postsData]) => {
             console.log("here 2");
             console.log("menuData: ", menusData.length);
             console.log("posts data", postsData.length);
             console.log('state: ', state)
 
-            const customPostsData = postsData.map((item, index) => {
-                const postTypeName =  menusData.filter(
+            const customPostsData = postsData.map( (item, index) => {
+                const postTypeName = menusData.filter(
                     (menu) => menu._id == item.data.parentID
                 )[0].name;
                 console.log('index: '+index +" : ",postTypeName)
@@ -62,6 +62,8 @@ function getPostTemp(req, res, next) {
                     ...item._doc,
                     index: index + 1,
                 };
+                console.log('hoàn thành lượt: ', index)
+                console.log('final data: ', finalData)
                 return finalData;
             });
             console.log("here 3", customPostsData);
@@ -206,7 +208,7 @@ class PostsController {
             method: "add",
             state: "pending",
         });
-        newTemps.save().then((data) => res.json(newTemps));
+        newTemps.save().then((data) => res.status(200).redirect('http://localhost:3000/admin/posts/pending'));
     }
 
     admin_updatePost(req, res, next) {
@@ -229,12 +231,12 @@ class PostsController {
                         method: "update",
                         state: "pending",
                     });
-                    newTemps.save().then((data) =>{ res.json(req.body)});
-                    postModel.findByIdAndUpdate(postId, {state: 'pending'}).then(result => {})
+                    newTemps.save().then((data) =>{ });
+                    postModel.findByIdAndUpdate(postId, {state: 'pending'}).then(result => {res.json(result)})
                     return;
                
                 }
-                res.status(200).redirect('back')
+                res.status(200).json('success')
             });
     }
     admin_deletePost(req, res, next) {
@@ -250,8 +252,8 @@ class PostsController {
                 method: "delete",
                 state: "pending",
             });
-            newTemps.save().then((data) =>{ res.status(200).json(data)});
-            postModel.findByIdAndUpdate(postId, {state: 'pending'}).then(result => {})
+            newTemps.save().then((data) =>{});
+            postModel.findByIdAndUpdate(postId, {state: 'pending'}).then(result =>  res.status(200).json(result))
             return;
         })
         
@@ -274,22 +276,21 @@ class PostsController {
                             case "add":
                                 const newPost = new postModel(tempData.data);
                                 newPost.save().then((result) => {} );
-                                tempModel.findByIdAndDelete(postID).then((result) => {});
+                                tempModel.findByIdAndDelete(postID).then((result) =>  res.status(200).json(result));
                                 break;
                             case "update":
                                 postModel.findByIdAndUpdate(tempData.data._id,{...tempData.data, state:'public'}).then(result => {});
-                                tempModel.findByIdAndDelete(postID).then((result) => {});
+                                tempModel.findByIdAndDelete(postID).then((result) => {res.status(200).json(result)});
                                 break;
                             case 'delete':
                                 postModel.findByIdAndDelete(tempData.data._id).then((result) => {});
-                                tempModel.findByIdAndDelete(postID).then((result) => {});
+                                tempModel.findByIdAndDelete(postID).then((result) => {res.status(200).json(result)});
                                 break;
                         }
                     })
                     .catch((error) => res.status(500).json({ error: error }));
                 break;
         }
-        res.status(200).json('success')
 
     }
 }

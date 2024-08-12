@@ -167,12 +167,12 @@ class PartnersController {
                         method: "update",
                         state: "pending",
                     });
-                    newTemps.save().then((data) =>{ res.json(req.body)});
-                    partnerModel.findByIdAndUpdate(partnerID, {state: 'pending'}).then(result => res.status(200).json('success'))
+                    newTemps.save().then((data) =>{});
+                    partnerModel.findByIdAndUpdate(partnerID, {state: 'pending'}).then(result => res.redirect('http://localhost:3000/admin/partners/pending'))
                     return;
                
                 }
-                res.status(200).json('success')
+                res.redirect('http://localhost:3000/admin/partners/pending')
             });
     }
     

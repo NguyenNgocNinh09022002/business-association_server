@@ -232,11 +232,11 @@ class PostsController {
                         state: "pending",
                     });
                     newTemps.save().then((data) =>{ });
-                    postModel.findByIdAndUpdate(postId, {state: 'pending'}).then(result => {res.json(result)})
+                    postModel.findByIdAndUpdate(postId, {state: 'pending'}).then(result => {res.redirect('http://localhost:3000/admin/posts/pending')})
                     return;
                
                 }
-                res.status(200).json('success')
+                res.redirect('http://localhost:3000/admin/posts/pending')
             });
     }
     admin_deletePost(req, res, next) {
